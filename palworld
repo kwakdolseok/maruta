@@ -1,30 +1,21 @@
 #!/bin/bash
 
-# 사용자의 홈 디렉토리로 이동
-cd "${HOME%/}"
-
+# 환경 변수 설정
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.1"
+VERSION="0.1.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
+GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
-# GitHub 주소를 반환하는 함수
-get_github_url() {
-    local github_url="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
-    echo "${github_url}"
-}
+# 메시지 출력 함수
 print_message() {
     echo -e "[\033[1;34m마루타 구동기\033[0m] $1"
 }
-print_message_usage() {
-    echo -e "[\033[1;36m사 용 법\033[0m] $1"
-}
-# 서비스 파일 생성 및 수정
+
+# 서비스 파일 생성 함수
 create_service_file() {
-    if [ -f "$SERVICE_FILE" ]; then
-        return
-    fi
+    [ -f "$SERVICE_FILE" ] && return
 
     sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]
@@ -47,88 +38,71 @@ EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable $SERVICE_NAME
+    print_message "$SERVICE_NAME 시스템에 구동기 등록이 완료되었습니다."
 }
 
-# 서비스 시작
-start_service() {
-    if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
-        print_message "현재 Palworld Server 서버가 이미 실행 중입니다. 추가 작업 없이 진행합니다."
-        return
-    elif [ "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
-        print_message "Palworld Server 현재 실행 중이지 않습니다. 서비스를 시작합니다."
-        sudo systemctl start $SERVICE_NAME
-    else
-        print_message "Palworld Server 구동기가 활성화되어 있지 않습니다. 구동기를 활성화하고 시작합니다."
-        sudo systemctl enable $SERVICE_NAME
-        sudo systemctl start $SERVICE_NAME
-    fi
+# 서비스 제어 함수
+control_service() {
+    case $1 in
+        start|START|st|ST|시작)
+            if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
+                print_message "현재 Palworld Server 서버가 이미 실행 중입니다. 추가 작업 없이 진행합니다."
+            else
+                if [ "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
+                    print_message "Palworld Server 현재 실행 중이지 않습니다. 서비스를 시작합니다."
+                else
+                    print_message "Palworld Server 구동기가 활성화되어 있지 않습니다. 구동기를 활성화하고 시작합니다."
+                    sudo systemctl enable $SERVICE_NAME
+                fi
+                sudo systemctl start $SERVICE_NAME
+            fi
+            ;;
+        stop|STOP|sp|SP|정지)
+            if systemctl is-active --quiet $SERVICE_NAME; then
+                print_message "서버를 중지합니다..."
+                sudo systemctl stop $SERVICE_NAME
+                sleep 2  # 잠시 대기
+                if systemctl is-active --quiet $SERVICE_NAME; then
+                    print_message "서버가 정상적으로 종료되지 않았습니다."
+                else
+                    print_message "서버가 정상적으로 종료되었습니다."
+                fi
+            else
+                print_message "서버는 이미 중지된 상태입니다."
+            fi
+            ;;
+        *)
+            echo "사용 가능한 명령어: start, stop"
+            ;;
+    esac
 }
 
-# 서비스 중지
-stop_service() {
-    if systemctl is-active --quiet $SERVICE_NAME; then
-        print_message "Palworld Server 를 중지합니다..."
-        sudo systemctl stop $SERVICE_NAME
-        # 잠시 대기 후 서비스 상태 재확인
-        sleep 2
-        if systemctl is-active --quiet $SERVICE_NAME; then
-            print_message "Palworld Server 가 정상적으로 종료되지 않았습니다. 수동으로 확인이 필요합니다."
-        else
-            print_message "Palworld Server 가 정상적으로 종료되었습니다."
-        fi
-    else
-        print_message "Palworld Server 이미 정지된 상태입니다."
-    fi
-}
-
-
-# 업데이트 확인 및 처리
+# 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
-    if [ "$1" = "noupdate" ]; then
-        return
-    fi
+    [ "$1" = "noupdate" ] && return
 
-    local github_url=$(get_github_url)
-
-    local remote_version=$(wget -qO- "${github_url}" | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
-
+    remote_version=$(wget -qO- "${GITHUB_URL}" | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
     if [ "$VERSION" != "$remote_version" ]; then
-        print_message "새 버전의 마루타 구동기 가 발견되었습니다. $remote_version 버전으로 업데이트하시겠습니까? (yes/y 또는 no/n)"
+        print_message "새 버전 $remote_version 발견. 업데이트를 진행하시겠습니까? (yes/y 또는 no/n)"
         read -r user_input
-        case $user_input in
-            yes|y|YES|Y)
-                print_message "마루타 구동기 를 업데이트하고 있습니다..."
-                wget -q -O ~/palworld "${github_url}"
-                chmod +x ~/palworld
-                exec ~/palworld noupdate
-                ;;
-            no|n|NO|N)
-                print_message "업데이트를 취소했습니다."
-                ;;
-            *)
-                print_message "잘못된 입력입니다. 업데이트를 취소합니다."
-                ;;
-        esac
+        if [[ $user_input =~ ^(yes|y|YES|Y)$ ]]; then
+            print_message "업데이트 중..."
+            wget -q -O ~/palworld "${GITHUB_URL}" && chmod +x ~/palworld
+            exec ~/palworld noupdate
+        else
+            print_message "업데이트 취소."
+        fi
     fi
 }
 
-# 서비스 파일 생성 조건 확인 및 실행
-if [ ! -f "$INIT_FLAG_FILE" ]; then
-   create_service_file
-   touch "$INIT_FLAG_FILE"
-else
-    :
-fi
+# 초기 설정 함수
+initialize_script() {
+    create_service_file
+    touch "$INIT_FLAG_FILE"
+}
+
+# 초기 설정 확인 및 실행
+[ ! -f "$INIT_FLAG_FILE" ] && initialize_script
 
 # 명령어 인자에 따른 서비스 제어
-case $1 in
-    start|s|시작)
-        start_service
-        ;;
-    stop|c|종료)
-        stop_service
-        ;;
-    *)
-        echo "사용 가능한 명령어: start, stop"
-        ;;
-esac
+control_service "$1"
