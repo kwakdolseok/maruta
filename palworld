@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.2"
+VERSION="0.1.3"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
@@ -58,6 +58,8 @@ control_service() {
             fi
             ;;
         stop|STOP|sp|SP|정지)
+                print_message "서버에 save 명령을 보냅니다."
+                execute_rcon_command "save"
             if systemctl is-active --quiet $SERVICE_NAME; then
                 print_message "서버를 중지합니다..."
                 sudo systemctl stop $SERVICE_NAME
@@ -71,29 +73,104 @@ control_service() {
                 print_message "서버는 이미 중지된 상태입니다."
             fi
             ;;
+        test)
+            read_palworld_settings
+            ;;
         *)
             echo "사용 가능한 명령어: start, stop"
             ;;
     esac
 }
 
+read_palworld_settings() {
+    local ini_file="$HOME/Steam/steamapps/common/PalServer/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
+
+    if [ ! -f "$ini_file" ]; then
+        print_message "Error: $ini_file 파일을 찾을 수 없습니다."
+        return 1
+    fi
+
+    local admin_password=$(awk '/^\[\/Script\/Pal.PalGameWorldSettings\]/, /^\[/' "$ini_file" | awk -F'=' '/AdminPassword/ {print $2}' | tr -d '"')
+    local rcon_port=$(awk '/^\[\/Script\/Pal.PalGameWorldSettings\]/, /^\[/' "$ini_file" | awk -F'=' '/RCONPort/ {print $2}')
+
+    print_message "AdminPassword: $admin_password"
+    print_message "RCONPort: $rcon_port"
+}
 # 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
     [ "$1" = "noupdate" ] && return
 
-    remote_version=$(wget -qO- "${GITHUB_URL}" | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
+    remote_version=$(wget -qO- "${GITHUB_URL}/VERSION")
+    
     if [ "$VERSION" != "$remote_version" ]; then
         print_message "새 버전 $remote_version 발견. 업데이트를 진행하시겠습니까? (yes/y 또는 no/n)"
         read -r user_input
         if [[ $user_input =~ ^(yes|y|YES|Y)$ ]]; then
             print_message "업데이트 중..."
-            wget -q -O ~/palworld "${GITHUB_URL}" && chmod +x ~/palworld
+            wget -q -O ~/palworld "${GITHUB_URL}/palworld" && chmod +x ~/palworld
             exec ~/palworld noupdate
         else
             print_message "업데이트 취소."
         fi
     fi
 }
+read_palworld_settings() {
+    local ini_file="$HOME/Steam/steamapps/common/PalServer/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
+
+    # 파일 존재 여부 확인
+    if [ ! -f "$ini_file" ]; then
+        print_message "Error: $ini_file 파일을 찾을 수 없습니다."
+        return 1
+    fi
+
+    # RCONEnabled 값 확인 및 변경
+    local rcon_enabled=$(awk '/RCONEnabled=/ {print $1}' "$ini_file")
+    if [ "$rcon_enabled" == "RCONEnabled=False" ]; then
+        sed -i 's/RCONEnabled=False/RCONEnabled=True/' "$ini_file"
+        print_message "RCONEnabled 옵션이 False에서 True로 변경되었습니다."
+    else
+        print_message "RCONEnabled 옵션은 이미 True로 설정되어 있습니다."
+    fi
+
+    # AdminPassword 값 추출
+    local admin_password=$(awk '/OptionSettings=/ {match($0, /AdminPassword="([^"]*)"/, arr); print arr[1]}' "$ini_file")
+    # RCONPort 값 추출
+    local rcon_port=$(awk '/OptionSettings=/ {match($0, /RCONPort=([0-9]+)/, arr); print arr[1]}' "$ini_file")
+
+    # 추출된 값 출력
+    print_message "AdminPassword: $admin_password"
+    print_message "RCONPort: $rcon_port"
+}
+
+execute_rcon_command() {
+    local command=$1  # 실행할 RCON 명령
+
+    # read_palworld_settings 함수로부터 설정 값 추출
+    local settings=$(read_palworld_settings)
+    local admin_password=$(echo "$settings" | grep 'AdminPassword' | cut -d' ' -f2)
+    local rcon_port=$(echo "$settings" | grep 'RCONPort' | cut -d' ' -f2)
+
+    # RCONEnabled 값 확인 (옵션)
+    local rcon_enabled=$(echo "$settings" | grep 'RCONEnabled' | cut -d' ' -f2)
+    if [[ "$rcon_enabled" != "True" ]]; then
+        print_message "RCONEnabled 설정이 True로 설정되지 않았습니다."
+        return 1
+    fi
+
+    # RCON 명령 실행
+    if [[ -n "$admin_password" && -n "$rcon_port" ]]; then
+        print_message "RCON 명령 실행: $command"
+        arrcon -s localhost -p "$rcon_port" -P "$admin_password" "$command"
+    else
+        print_message "AdminPassword 또는 RCONPort가 설정되지 않았습니다."
+    fi
+}
+
+# 함수 사용 예시
+# execute_rcon_command "status"
+
+# 업데이트 항시체크
+check_and_update_script
 
 # 초기 설정 함수
 initialize_script() {
