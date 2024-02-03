@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.1"
+VERSION="0.1.3"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
@@ -60,6 +60,7 @@ control_service() {
         stop|STOP|sp|SP|정지)
                 print_message "서버에 save 명령을 보냅니다."
                 execute_rcon_command "save"
+                sleep 2
             if systemctl is-active --quiet $SERVICE_NAME; then
                 print_message "서버를 중지합니다..."
                 sudo systemctl stop $SERVICE_NAME
@@ -82,38 +83,72 @@ control_service() {
     esac
 }
 
-read_palworld_settings() {
-    local ini_file="$HOME/Steam/steamapps/common/PalServer/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
 
-    if [ ! -f "$ini_file" ]; then
-        print_message "Error: $ini_file 파일을 찾을 수 없습니다."
-        return 1
-    fi
-
-    local admin_password=$(awk '/^\[\/Script\/Pal.PalGameWorldSettings\]/, /^\[/' "$ini_file" | awk -F'=' '/AdminPassword/ {print $2}' | tr -d '"')
-    local rcon_port=$(awk '/^\[\/Script\/Pal.PalGameWorldSettings\]/, /^\[/' "$ini_file" | awk -F'=' '/RCONPort/ {print $2}')
-
-    print_message "AdminPassword: $admin_password"
-    print_message "RCONPort: $rcon_port"
-}
 # 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
     [ "$1" = "noupdate" ] && return
 
-    remote_version=$(wget -qO- "${GITHUB_URL}/VERSION")
-    
+    # VERSION 파일에서 버전 정보를 가져옵니다.
+    local remote_version=$(wget -qO- "${GITHUB_URL}/VERSION")
+
+    # 원격 버전 정보가 비어있지 않은지 확인합니다.
+    if [ -z "$remote_version" ]; then
+        print_message "원격 버전 정보를 가져올 수 없습니다."
+        return 1
+    fi
+
+    # 현재 버전과 원격 버전을 비교합니다.
     if [ "$VERSION" != "$remote_version" ]; then
         print_message "새 버전 $remote_version 발견. 업데이트를 진행하시겠습니까? (yes/y 또는 no/n)"
         read -r user_input
-        if [[ $user_input =~ ^(yes|y|YES|Y)$ ]]; then
-            print_message "업데이트 중..."
-            wget -q -O ~/palworld "${GITHUB_URL}/palworld" && chmod +x ~/palworld
-            exec ~/palworld noupdate
-        else
-            print_message "업데이트 취소."
-        fi
+        case $user_input in
+            yes|y|YES|Y)
+                print_message "업데이트 중..."
+                if wget -q -O ~/palworld_temp "${GITHUB_URL}/palworld" && chmod +x ~/palworld_temp; then
+                    mv ~/palworld_temp ~/palworld
+                    print_message "업데이트가 완료되었습니다. 새 스크립트를 실행합니다."
+                    exec ~/palworld noupdate
+                else
+                    print_message "업데이트 파일 다운로드에 실패했습니다."
+                    return 1
+                fi
+                ;;
+            no|n|NO|N)
+                print_message "업데이트를 취소했습니다."
+                ;;
+            *)
+                print_message "잘못된 입력입니다. 업데이트를 취소합니다."
+                ;;
+        esac
+    else
+        print_message "현재 최신 버전을 사용 중입니다."
     fi
 }
+
+
+    local remote_version=$(wget -qO- https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
+
+    if [ "$VERSION" != "$remote_version" ]; then
+        print_message "새 버전이 발견되었습니다. 마루타 $remote_version 버전으로 업데이트하시겠습니까? (yes/y 또는 no/n)"
+        read -r user_input
+        case $user_input in
+            yes|y|YES|Y)
+                print_message "스크립트를 업데이트하고 있습니다..."
+                wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
+                chmod +x ~/palworld
+                # 업데이트 후 스크립트를 실행할 때 'noupdate' 인자를 전달합니다.
+                exec ~/palworld
+                ;;
+            no|n|NO|N)
+                print_message "업데이트를 취소했습니다."
+                ;;
+            *)
+                print_message "잘못된 입력입니다. 업데이트를 취소합니다."
+                ;;
+        esac
+    fi
+}
+
 read_palworld_settings() {
     local ini_file="$HOME/Steam/steamapps/common/PalServer/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
 
@@ -123,17 +158,17 @@ read_palworld_settings() {
         return 1
     fi
 
-    # RCONEnabled 값 확인 및 변경
-    local rcon_enabled=$(awk '/RCONEnabled=/ {print $1}' "$ini_file")
-    if [ "$rcon_enabled" == "RCONEnabled=False" ]; then
+    # RCONEnabled 값 확인 및 필요한 경우 True로 변경
+    if grep -q 'RCONEnabled=False' "$ini_file"; then
         sed -i 's/RCONEnabled=False/RCONEnabled=True/' "$ini_file"
-        print_message "RCONEnabled 옵션이 False에서 True로 변경되었습니다."
+        print_message "RCONEnabled 설정이 False에서 True로 변경되었습니다."
     else
-        print_message "RCONEnabled 옵션은 이미 True로 설정되어 있습니다."
+        print_message "RCONEnabled 설정은 이미 True입니다."
     fi
 
     # AdminPassword 값 추출
     local admin_password=$(awk '/OptionSettings=/ {match($0, /AdminPassword="([^"]*)"/, arr); print arr[1]}' "$ini_file")
+    
     # RCONPort 값 추출
     local rcon_port=$(awk '/OptionSettings=/ {match($0, /RCONPort=([0-9]+)/, arr); print arr[1]}' "$ini_file")
 
@@ -141,6 +176,7 @@ read_palworld_settings() {
     print_message "AdminPassword: $admin_password"
     print_message "RCONPort: $rcon_port"
 }
+
 
 execute_rcon_command() {
     local command=$1  # 실행할 RCON 명령
