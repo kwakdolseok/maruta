@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# 사용자의 홈 디렉토리로 이동
+cd "${HOME%/}"
+
+USERNAME=$(whoami)
+SERVICE_NAME="Palworld"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+VERSION="0.1.0"
+INIT_FLAG_FILE="${HOME%/}/.script_init_done"
+# GitHub 주소를 반환하는 함수
+get_github_url() {
+    local github_user="dolseok09"
+    local repository="palserver"
+    local github_url="https://raw.githubusercontent.com/${github_user}/${repository}/main/palworld"
+    echo "${github_url}"
+}
+
+# 서비스 파일 생성 및 수정
+create_service_file() {
+    if [ -f "$SERVICE_FILE" ]; then
+        return
+    fi
+
+    sudo tee "$SERVICE_FILE" >/dev/null <<EOF
+[Unit]
+Description=Palworld Service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=$USERNAME
+Group=$USERNAME
+WorkingDirectory=${HOME%/}/Steam/steamapps/common/PalServer
+ExecStart=${HOME%/}/Steam/steamapps/common/PalServer/PalServer.sh -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable $SERVICE_NAME
+}
+
+# 서비스 시작
+start_service() {
+    if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
+        echo "현재 Palworld 서버가 이미 실행 중입니다. 추가 작업 없이 진행합니다."
+        return
+    elif [ "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
+        echo "Palworld 서비스는 활성화되어 있으나 현재 실행 중이지 않습니다. 서비스를 시작합니다."
+        sudo systemctl start $SERVICE_NAME
+    else
+        echo "Palworld 서비스가 활성화되어 있지 않습니다. 서비스를 활성화하고 시작합니다."
+        sudo systemctl enable $SERVICE_NAME
+        sudo systemctl start $SERVICE_NAME
+    fi
+}
+
+# 서비스 중지
+stop_service() {
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        echo "Palworld 서버를 중지합니다..."
+        sudo systemctl stop $SERVICE_NAME
+    else
+        echo "Palworld 서버가 이미 정지된 상태입니다."
+    fi
+}
+
+# 업데이트 확인 및 처리
+check_and_update_script() {
+    if [ "$1" = "noupdate" ]; then
+        return
+    fi
+
+    local github_url=$(get_github_url)
+
+    local remote_version=$(wget -qO- "${github_url}" | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
+
+    if [ "$VERSION" != "$remote_version" ]; then
+        echo "새 버전의 Palworld가 발견되었습니다. 마루타 $remote_version 버전으로 업데이트하시겠습니까? (yes/y 또는 no/n)"
+        read -r user_input
+        case $user_input in
+            yes|y|YES|Y)
+                echo "Palworld를 업데이트하고 있습니다..."
+                wget -q -O ~/palworld "${github_url}"
+                chmod +x ~/palworld
+                exec ~/palworld noupdate
+                ;;
+            no|n|NO|N)
+                echo "업데이트를 취소했습니다."
+                ;;
+            *)
+                echo "잘못된 입력입니다. 업데이트를 취소합니다."
+                ;;
+        esac
+    fi
+}
+
+create_service_file
+
+
+case $1 in
+    start|s|시작)
+        start_service
+        ;;
+    stop|c|종료)
+        stop_service
+        ;;
+esac
