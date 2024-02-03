@@ -6,7 +6,7 @@ cd "${HOME%/}"
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.0"
+VERSION="0.1.1"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 # GitHub 주소를 반환하는 함수
