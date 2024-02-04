@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.10"
+VERSION="0.1.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
@@ -202,13 +202,6 @@ cleanup_resources() {
     print_message "모든 리소스가 삭제되었습니다."
 }
 
-# 사용자 확인 절차 추가
-read -p "모든 리소스를 삭제하시겠습니까? (y/N): " confirm
-if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    cleanup_resources
-else
-    print_message "리소스 삭제가 취소되었습니다."
-fi
 
 # 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
