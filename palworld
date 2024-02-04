@@ -222,7 +222,7 @@ control_service() {
             update_service
             ;;
         *)
-            echo "사용 가능한 명령어: start, stop, update"
+            print_usage
             ;;
     esac
 }
