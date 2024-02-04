@@ -1,18 +1,29 @@
 #!/bin/bash
 
 # 비밀 키를 환경 변수 또는 안전한 방법으로 설정
-SECRET_KEY="YOUR_SECRET_KEY"
+SECRET_KEY="$SECRET_KEY"
 
-# TOTP 코드 입력 요청
-read -p "Enter your TOTP code: " USER_CODE
+# 최대 시도 횟수
+MAX_ATTEMPTS=3
 
-# oathtool을 사용하여 현재 TOTP 코드 생성 및 검증
-GENERATED_CODE=$(oathtool --totp -b "$SECRET_KEY")
+for ((attempt=1; attempt<=MAX_ATTEMPTS; attempt++)); do
+    # TOTP 코드 입력 요청
+    read -p "TOTP 코드를 입력하세요: " USER_CODE
 
-if [ "$USER_CODE" == "$GENERATED_CODE" ]; then
-    echo "Code verified. Proceeding with the installation."
-    # 실제 설치 과정을 여기에 추가합니다.
-else
-    echo "Invalid code. Access denied."
-    exit 1
-fi
+    # oathtool을 사용하여 현재 TOTP 코드 생성 및 검증
+    GENERATED_CODE=$(oathtool --totp -b "$SECRET_KEY")
+
+    if [ "$USER_CODE" == "$GENERATED_CODE" ]; then
+        echo "코드가 확인되었습니다. 설치를 진행합니다."
+        # 실제 설치 과정을 여기에 추가합니다.
+        exit 0
+    else
+        remaining_attempts=$((MAX_ATTEMPTS-attempt))
+        if [ $remaining_attempts -gt 0 ]; then
+            echo "잘못된 코드입니다. $remaining_attempts 번의 시도가 남았습니다."
+        else
+            echo "잘못된 코드입니다. 더 이상 시도할 수 없습니다. 설치를 진행할 수 없습니다."
+            exit 1
+        fi
+    fi
+done
