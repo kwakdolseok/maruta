@@ -4,13 +4,13 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.4"
+VERSION="0.15"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
 # 메시지 출력 함수
 print_message() {
-    echo -e "[\033[1;32m서버 구동기\033[0m] $1"
+    echo -e "\033[1;34m마루타 구동기\033[0m] $1"
 }
 print_message_usage() {
     echo -e "[\033[1;36m사 용 법\033[0m] $1"
@@ -201,8 +201,8 @@ check_and_update_script
 # 초기 설정 함수
 initialize_script() {
     create_service_file
-    read_palworld_settings
     print_initial_message
+    read_palworld_settings
     touch "$INIT_FLAG_FILE"
 }
 
