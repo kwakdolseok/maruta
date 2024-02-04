@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.5"
+VERSION="0.1.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
 
@@ -164,6 +164,51 @@ update_service() {
     fi
 }
 
+# 리소스 삭제 함수
+cleanup_resources() {
+    print_message "리소스 삭제를 시작합니다..."
+
+    # 서비스 파일 삭제
+    if [ -f "$SERVICE_FILE" ]; then
+        print_message "$SERVICE_NAME 서비스 파일을 삭제합니다."
+        sudo systemctl stop $SERVICE_NAME
+        sudo systemctl disable $SERVICE_NAME
+        sudo rm -f "$SERVICE_FILE"
+        sudo systemctl daemon-reload
+        print_message "$SERVICE_NAME 서비스 파일이 삭제되었습니다."
+    else
+        print_message "$SERVICE_NAME 서비스 파일이 이미 삭제되었거나 존재하지 않습니다."
+    fi
+
+    # 초기화 플래그 파일 삭제
+    if [ -f "$INIT_FLAG_FILE" ]; then
+        print_message "초기화 플래그 파일을 삭제합니다."
+        rm -f "$INIT_FLAG_FILE"
+        print_message "초기화 플래그 파일이 삭제되었습니다."
+    else
+        print_message "초기화 플래그 파일이 이미 삭제되었거나 존재하지 않습니다."
+    fi
+
+    # 홈 디렉토리에서 palworld 파일/디렉토리 삭제
+    local palworld_path="${HOME}/palworld"
+    if [ -e "$palworld_path" ]; then
+        print_message "홈 디렉토리에서 'palworld'을(를) 삭제합니다."
+        rm -rf "$palworld_path"
+        print_message "'palworld'이(가) 삭제되었습니다."
+    else
+        print_message "홈 디렉토리에 'palworld'이(가) 존재하지 않습니다."
+    fi
+
+    print_message "모든 리소스가 삭제되었습니다."
+}
+
+# 사용자 확인 절차 추가
+read -p "모든 리소스를 삭제하시겠습니까? (y/N): " confirm
+if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    cleanup_resources
+else
+    print_message "리소스 삭제가 취소되었습니다."
+fi
 
 # 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
@@ -221,8 +266,11 @@ control_service() {
         update|UPDATE|up|UP|업데이트)
             update_service
             ;;
+        삭제)
+            cleanup_resources
+            ;;
         *)
-            print_usage
+        print_usage 
             ;;
     esac
 }
