@@ -93,47 +93,51 @@ execute_rcon_command() {
         print_message "AdminPassword 또는 RCONPort가 설정되지 않았습니다."
     fi
 }
-# 서비스 제어 함수
-control_service() {
-    case $1 in
-        start|START|st|ST|시작)
-            if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
-                print_message "현재 Palworld Server 서버가 이미 실행 중입니다. 추가 작업 없이 진행합니다."
-            else
-                if [ "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
-                    print_message "Palworld Server 현재 실행 중이지 않습니다. 서비스를 시작합니다."
-                else
-                    print_message "Palworld Server 구동기가 활성화되어 있지 않습니다. 구동기를 활성화하고 시작합니다."
-                    sudo systemctl enable $SERVICE_NAME
-                fi
-                sudo systemctl start $SERVICE_NAME
-            fi
-            ;;
-        stop|STOP|sp|SP|정지)
+# 서비스 시작 함수
+start_service() {
+    if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
+        print_message "현재 Palworld Server 서버가 이미 실행 중입니다."
+    else
+        sudo systemctl start $SERVICE_NAME
+        print_message "Palworld Server 서비스를 시작합니다."
+    fi
+}
 
-            if systemctl is-active --quiet $SERVICE_NAME; then
-                print_message "서버에 save 명령을 보냅니다."
-                execute_rcon_command "save"
-                sleep 10
-                print_message "서버를 중지합니다..."
-                sudo systemctl stop $SERVICE_NAME
-                sleep 2  # 잠시 대기
-                if systemctl is-active --quiet $SERVICE_NAME; then
-                    print_message "서버가 정상적으로 종료되지 않았습니다."
-                else
-                    print_message "서버가 정상적으로 종료되었습니다."
-                fi
-            else
-                print_message "서버는 이미 중지된 상태입니다."
-            fi
-            ;;
-        test)
-            read_palworld_settings
-            ;;
-        *)
-            echo "사용 가능한 명령어: start, stop"
-            ;;
-    esac
+# 서비스 중지 함수
+stop_service() {
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        print_message "서버에 save 명령을 보냅니다."
+        execute_rcon_command "save"
+        sleep 10
+        sudo systemctl stop $SERVICE_NAME
+        print_message "서버를 중지합니다..."
+        sleep 2  # 잠시 대기
+        if systemctl is-active --quiet $SERVICE_NAME; then
+            print_message "서버가 정상적으로 종료되지 않았습니다."
+        else
+            print_message "서버가 정상적으로 종료되었습니다."
+        fi
+    else
+        print_message "서버는 이미 중지된 상태입니다."
+    fi
+}
+
+# 서비스 업데이트 함수
+update_service() {
+    stop_service
+    print_message "Palworld 서버 업데이트를 시작합니다..."
+    update_result=$(steamcmd +login anonymous +app_update 2394010 validate +quit 2>&1)
+    
+    if echo "$update_result" | grep -q "Success! App '2394010' fully installed."; then
+        print_message "업데이트 완료! 게임 서버를 다시 시작합니다."
+        start_service
+    elif echo "$update_result" | grep -q "Error"; then
+        print_message "업데이트 중 오류가 발생했습니다. 상세 정보:"
+        echo "$update_result"
+    else
+        print_message "업데이트 상태를 확인할 수 없습니다. 상세 로그를 확인하세요:"
+        echo "$update_result"
+    fi
 }
 
 
@@ -178,6 +182,24 @@ initialize_script() {
 
 # 초기 설정 확인 및 실행
 [ ! -f "$INIT_FLAG_FILE" ] && initialize_script
+
+
+control_service() {
+    case $1 in
+        start|START|st|ST|시작)
+            start_service
+            ;;
+        stop|STOP|sp|SP|정지)
+            stop_service
+            ;;
+        update|UPDATE|up|UP|업데이트)
+            update_service
+            ;;
+        *)
+            echo "사용 가능한 명령어: start, stop, update"
+            ;;
+    esac
+}
 
 # 명령어 인자에 따른 서비스 제어
 control_service "$1"
