@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.2"
+VERSION="0.1.0"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -110,7 +110,7 @@ execute_rcon_command() {
 start_service() {
     # 서비스 파일의 존재 여부를 확인합니다.
     if [ ! -f "$SERVICE_FILE" ]; then
-        print_message "경고: Palworld Server  서비스 파일이 존재하지 않습니다. 서비스 파일을 확인하거나 생성해주세요."
+        print_message "경고: Palworld Server 서비스 파일이 존재하지 않습니다. 서비스 파일을 확인하거나 생성해주세요."
         return 1 # 에러 코드와 함께 종료합니다.
     fi
 
@@ -146,6 +146,7 @@ stop_service() {
         execute_rcon_command "Broadcast Pelworld_server_system_shutdown"
         execute_rcon_command "Save"
         execute_rcon_command "Broadcast [Save]_Success!"
+        sleep 2
         sudo systemctl stop $SERVICE_NAME
         print_message "서버를 중지합니다..."
         sleep 2  # 잠시 대기
@@ -230,11 +231,12 @@ check_and_update_script() {
         read -r user_input
         case $user_input in
             yes|y|YES|Y)
-                print_message "스크립트를 업데이트하고 있습니다..."
+                print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
                 # 업데이트 후 스크립트를 실행할 때 'noupdate' 인자를 전달합니다.
                 exec ~/palworld noupdate
+                print_message "마루타 구동기 업데이트 완료 했습니다."
                 ;;
             no|n|NO|N)
                 print_message "업데이트를 취소했습니다."
