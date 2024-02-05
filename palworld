@@ -19,7 +19,7 @@ print_message_usage() {
 print_initial_message() {
     print_message "안녕하세요 $USERNAME 님 마루타 구동기를 이용해 주셔서 감사합니다. "
     print_message "기존에 이용자가 테스트가 아닌 먼저 테스트를 진행 후 업데이트하도록 하겠습니다."
-    print_message "곽돌석은 현재 Palworld 게임 구매 안 하고 서버 구축 도 안 한 상태입니다. 그래서 여러분이 실험체입니다"
+    print_message "기존 버그 & 오류 & 메시지 무한 출력은 곽돌석 에 문의 부탁드립니다."
     echo " "
     print_usage
 }
@@ -27,13 +27,17 @@ print_initial_message() {
 
 print_usage() {
     print_message_usage "서버 시작 : ./palworld start | st | 시작" 
-    print_message_usage "기존 사용하던 screen 유틸리티 없이 백그라운드에서 실행합니다."
+    print_message_usage "Palworld Server 백그라운드 에서 실행 합니다. "
     echo -e ""
     print_message_usage "서버 종료 : ./palworld stop | sp | 종료"
-    print_message_usage "백그라운드에서 실행 중인 게임 서버 종료합니다."
+    print_message_usage "Palworld Server 백그라운드 에서 종료 합니다."
     echo -e ""
     print_message_usage "서버 업데이트 : ./palworld update | up | 업데이트"
-    print_message_usage "서버 업데이트는 자동 종료 자동 업데이트 자동 시작 한 번에 수행합니다."
+    print_message_usage "Palworld Server 버전을 업데이트 합니다"
+    echo -e ""
+    print_message_usage "명령어 사용법  : ./palworld 명령어" 
+    print_message_usage "예) ./palworld start | st | 시작 이렇게 있으면 3개중 선택 "
+    print_message_usage "예) ./palworld st"
     echo -e ""
 }
 
@@ -62,7 +66,7 @@ EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable $SERVICE_NAME
-    print_message "$SERVICE_NAME 시스템에 구동기 등록이 완료되었습니다."
+    print_message "$SERVICE_NAME 리눅스 시스템에 구동기 등록이 완료되었습니다."
 }
 
 getAdminPassword() {
@@ -86,16 +90,13 @@ getRCONPort() {
 }
 
 execute_rcon_command() {
-    # 첫 번째 인자는 명령어입니다.
     local rcon_command=$1
-    # 나머지 인자를 하나의 문자열로 결합합니다.
-    shift # 첫 번째 인자를 제거하고 나머지 인자들을 처리합니다.
-    local rcon_args="$*" # 나머지 모든 인자를 하나의 문자열로 결합합니다.
-
+    shift 
+    local rcon_args="$*" 
     local rcon_port=$(getRCONPort)
     local admin_password=$(getAdminPassword)
 
-    # ARRCON 유틸리티를 사용하여 RCON 명령 실행
+
     if [ -n "$rcon_args" ]; then
         ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args"
     else
@@ -103,18 +104,14 @@ execute_rcon_command() {
     fi
 }
 
-# 예제 명령어 사용법
-# execute_rcon_command "여기에_RCON_명령어_입력"
 
-# 서비스 시작 함수
 start_service() {
-    # 서비스 파일의 존재 여부를 확인합니다.
     if [ ! -f "$SERVICE_FILE" ]; then
         print_message "경고: Palworld Server 서비스 파일이 존재하지 않습니다. 서비스 파일을 확인하거나 생성해주세요."
-        return 1 # 에러 코드와 함께 종료합니다.
+        return 1 
     fi
 
-    # 현재 서비스 상태를 확인합니다.
+
     if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
         print_message "현재 Palworld Server 서버가 이미 실행 중입니다."
         return 0 # 이미 실행 중이므로 정상 종료합니다.
@@ -146,6 +143,7 @@ stop_service() {
         execute_rcon_command "Broadcast Pelworld_server_system_shutdown"
         execute_rcon_command "Save"
         execute_rcon_command "Broadcast [Save]_Success!"
+        print_message "[Save]_Success!"
         sleep 2
         sudo systemctl stop $SERVICE_NAME
         print_message "서버를 중지합니다..."
