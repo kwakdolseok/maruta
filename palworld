@@ -4,9 +4,9 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.1.2"
+VERSION="0.2.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
-GITHUB_URL="https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld"
+
 
 print_message() {
     echo -e "[\033[1;34m\033[1m마루타 구동기\033[0m] $1"  # 파란색 볼드
@@ -67,29 +67,39 @@ EOF
 
 getAdminPassword() {
     local output_file="$HOME/.palworldsettings.ini"
+    if [ ! -f "$output_file" ]; then
+        print_message "설정 파일($output_file)이 존재하지 않습니다."
+        exit 1
+    fi
     local admin_password=$(awk '/AdminPassword:/ {print $2}' "$output_file")
     echo "$admin_password"
 }
 
-# RCONPort 값을 얻는 함수
 getRCONPort() {
     local output_file="$HOME/.palworldsettings.ini"
+    if [ ! -f "$output_file" ]; then
+        print_message "설정 파일($output_file)이 존재하지 않습니다."
+        exit 1
+    fi
     local rcon_port=$(awk '/RCONPort:/ {print $2}' "$output_file")
     echo "$rcon_port"
 }
 
-
 execute_rcon_command() {
-    local admin_password=$(getAdminPassword)
-    local rcon_port=$(getRCONPort)
-    local command="$1" # 첫 번째 인수를 RCON 명령으로 사용
+    # 첫 번째 인자는 명령어입니다.
+    local rcon_command=$1
+    # 나머지 인자를 하나의 문자열로 결합합니다.
+    shift # 첫 번째 인자를 제거하고 나머지 인자들을 처리합니다.
+    local rcon_args="$*" # 나머지 모든 인자를 하나의 문자열로 결합합니다.
 
-    # RCON 명령 실행
-    if [[ -n "$admin_password" && -n "$rcon_port" && -n "$command" ]]; then
-        print_message "RCON 명령 실행: $command"
-        ARRCON -s localhost -P "$rcon_port" -p "$admin_password" "$command"
+    local rcon_port=$(getRCONPort)
+    local admin_password=$(getAdminPassword)
+
+    # ARRCON 유틸리티를 사용하여 RCON 명령 실행
+    if [ -n "$rcon_args" ]; then
+        ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args"
     else
-        print_message "AdminPassword, RCONPort 또는 명령어가 설정되지 않았습니다."
+        ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command"
     fi
 }
 
@@ -133,8 +143,9 @@ start_service() {
 stop_service() {
     if systemctl is-active --quiet $SERVICE_NAME; then
         print_message "서버에 save 명령을 보냅니다."
-        execute_rcon_command "save"
-        sleep 10
+        execute_rcon_command "Broadcast Pelworld_server_system_shutdown"
+        execute_rcon_command "Save"
+        execute_rcon_command "Broadcast [Save]_Success!"
         sudo systemctl stop $SERVICE_NAME
         print_message "서버를 중지합니다..."
         sleep 2  # 잠시 대기
@@ -243,7 +254,6 @@ check_and_update_script
 initialize_script() {
     create_service_file
     print_initial_message
-    read_palworld_settings
     touch "$INIT_FLAG_FILE"
 }
 
@@ -262,12 +272,20 @@ control_service() {
         update|UPDATE|up|UP|업데이트)
             update_service
             ;;
-        test)
-            execute_rcon_command
+        execute_rcon_command)
+            shift
+            if [ $# -gt 0 ]; then
+                execute_rcon_command "$@"
+            else
+                print_message "RCON 명령어가 지정되지 않았습니다."
+            fi
+            ;;
+        삭제)
+            cleanup_resources
             ;;
         
     esac
 }
 
-# 명령어 인자에 따른 서비스 제어
-control_service "$1"
+control_service "$@"
+
