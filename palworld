@@ -29,11 +29,26 @@ print_usage() {
     print_message_usage "서버 시작 : ./palworld start | st | 시작" 
     print_message_usage "Palworld Server 백그라운드 에서 실행 합니다. "
     echo -e ""
-    print_message_usage "서버 종료 : ./palworld stop | sp | 종료"
+    print_message_usage "서버 종료 : ./palworld stop | sp | 정지"
     print_message_usage "Palworld Server 백그라운드 에서 종료 합니다."
     echo -e ""
     print_message_usage "서버 업데이트 : ./palworld update | up | 업데이트"
     print_message_usage "Palworld Server 버전을 업데이트 합니다"
+    echo -e ""
+    print_message_usage "서버 상태 : ./palworld state | st | 상태"
+    print_message_usage "Palworld Server 상태를 확인할수 있습니다."
+    echo -e ""
+    print_message_usage "서버 저장 : ./palworld save | sv | 저장"
+    print_message_usage "Palworld Server 상태를 확인할수 있습니다."
+    echo -e ""
+    print_message_usage "백업 파일 & 저장 파일 불러오기 : ./palworld load | ld | 로드"
+    print_message_usage "Palworld Server 백업 파일 & 저장 파일 불러오기 할수 있습니다."
+    print_message_usage "백업 파일 : ./palworld load backup"
+    print_message_usage "저장 파일 : ./palworld load saved"
+    echo -e ""
+    echo -e ""
+    print_message_usage "서버재시작: ./palworld restart | rt "
+    print_message_usage "Palworld Server 를 재시작 을 합니다"
     echo -e ""
     print_message_usage "명령어 사용법  : ./palworld 명령어" 
     print_message_usage "예) ./palworld start | st | 시작 이렇게 있으면 3개중 선택 "
@@ -91,27 +106,40 @@ getRCONPort() {
 
 execute_rcon_command() {
     local rcon_command=$1
-    shift 
-    local rcon_args="$*" 
+    shift
+    local rcon_args="$*"
     local rcon_port=$(getRCONPort)
     local admin_password=$(getAdminPassword)
 
-
-    if [ -n "$rcon_args" ]; then
-        ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args"
+    if [ "$rcon_command" = "Save" ]; then
+        # 'Save' 명령을 실행할 때만 특별한 처리를 적용
+        local output=$(./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args" 2>&1)
+        echo "$output" | grep "Complete Save"
+        # "Complete Save" 메시지가 있을 경우 출력
+        if [ $? -ne 0 ]; then
+            echo "저장 명령이 성공적으로 완료되지 않았습니다."
+        fi
+    elif [ "$rcon_command" = "info" ]; then
+        # 'info' 명령을 실행할 때만 특별한 처리를 적용
+        local output=$(./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args" 2>&1)
+        echo "$output" | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1
     else
-        ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command"
+        # 그 외 명령에 대해서는 모든 출력을 숨김
+        if [ -n "$rcon_args" ]; then
+            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args" >/dev/null 2>&1
+        else
+            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" >/dev/null 2>&1
+        fi
     fi
 }
 
-
 start_service() {
     if [ ! -f "$SERVICE_FILE" ]; then
-        print_message "경고: Palworld Server 서비스 파일이 존재하지 않습니다. 서비스 파일을 확인하거나 생성해주세요."
+        #print_message "경고: Palworld Server 서비스 파일이 존재하지 않습니다. 서비스 파일을 확인하거나 생성해주세요."
+        create_service_file
+        
         return 1 
     fi
-
-
     if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
         print_message "현재 Palworld Server 서버가 이미 실행 중입니다."
         return 0 # 이미 실행 중이므로 정상 종료합니다.
@@ -139,14 +167,13 @@ start_service() {
 # 서비스 중지 함수
 stop_service() {
     if systemctl is-active --quiet $SERVICE_NAME; then
-        print_message "서버에 save 명령을 보냅니다."
         execute_rcon_command "Broadcast Pelworld_server_system_shutdown"
-        execute_rcon_command "Save"
+        execute_rcon_command Save
         execute_rcon_command "Broadcast [Save]_Success!"
+        print_message "서버를 중지합니다..."
         print_message "[Save]_Success!"
         sleep 2
-        sudo systemctl stop $SERVICE_NAME
-        print_message "서버를 중지합니다..."
+        sudo systemctl stop $SERVICE_NAME        
         sleep 2  # 잠시 대기
         if systemctl is-active --quiet $SERVICE_NAME; then
             print_message "서버가 정상적으로 종료되지 않았습니다."
@@ -160,13 +187,16 @@ stop_service() {
 
 # 서비스 업데이트 함수
 update_service() {
-    stop_service
-    print_message "Palworld 서버 업데이트를 시작합니다..."
+
+    update_version=$(execute_rcon_command info | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+    print_message "현재 서버 버전: $update_version Palworld 서버 업데이트를 시작합니다..."
+    execute_rcon_command Save
+    sudo systemctl stop $SERVICE_NAME
     update_result=$(steamcmd +login anonymous +app_update 2394010 validate +quit 2>&1)
-    
+
     if echo "$update_result" | grep -q "Success! App '2394010' fully installed."; then
-        print_message "업데이트 완료! 게임 서버를 다시 시작합니다."
-        start_service
+        print_message " $update_version 버전 업데이트 완료! 게임 서버를 다시 시작합니다."
+        sudo systemctl start $SERVICE_NAME
     elif echo "$update_result" | grep -q "Error"; then
         print_message "업데이트 중 오류가 발생했습니다. 상세 정보:"
         echo "$update_result"
@@ -176,11 +206,11 @@ update_service() {
     fi
 }
 
-# 리소스 삭제 함수
+
 cleanup_resources() {
     print_message "리소스 삭제를 시작합니다..."
 
-    # 서비스 파일 삭제
+
     if [ -f "$SERVICE_FILE" ]; then
         print_message "$SERVICE_NAME 서비스 파일을 삭제합니다."
         sudo systemctl stop $SERVICE_NAME
@@ -192,7 +222,6 @@ cleanup_resources() {
         print_message "$SERVICE_NAME 서비스 파일이 이미 삭제되었거나 존재하지 않습니다."
     fi
 
-    # 초기화 플래그 파일 삭제
     if [ -f "$INIT_FLAG_FILE" ]; then
         print_message "초기화 플래그 파일을 삭제합니다."
         rm -f "$INIT_FLAG_FILE"
@@ -201,7 +230,6 @@ cleanup_resources() {
         print_message "초기화 플래그 파일이 이미 삭제되었거나 존재하지 않습니다."
     fi
 
-    # 홈 디렉토리에서 palworld 파일/디렉토리 삭제
     local palworld_path="${HOME}/palworld"
     if [ -e "$palworld_path" ]; then
         print_message "홈 디렉토리에서 'palworld'을(를) 삭제합니다."
@@ -214,16 +242,11 @@ cleanup_resources() {
     print_message "모든 리소스가 삭제되었습니다."
 }
 
-
-# 스크립트 업데이트 확인 및 실행
 check_and_update_script() {
-    # 첫 번째 인자로 'noupdate'를 받으면 업데이트 검사를 건너뜁니다.
     if [ "$1" = "noupdate" ]; then
         return
     fi
-
     local remote_version=$(wget -qO- https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
-
     if [ "$VERSION" != "$remote_version" ]; then
         print_message "새 버전 $remote_version 발견. 업데이트를 진행하시겠습니까? (yes/y 또는 no/n)"
         read -r user_input
@@ -232,7 +255,6 @@ check_and_update_script() {
                 print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
-                # 업데이트 후 스크립트를 실행할 때 'noupdate' 인자를 전달합니다.
                 exec ~/palworld noupdate
                 print_message "마루타 구동기 업데이트 완료 했습니다."
                 ;;
@@ -246,20 +268,234 @@ check_and_update_script() {
     fi
 }
 
-
-# 업데이트 체크 함수를 호출합니다.
+check_service_state() {
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        print_message "서버가 실행 중입니다."
+        local start_time=$(systemctl show -p ActiveEnterTimestamp $SERVICE_NAME | cut -d'=' -f2)
+        if [ -n "$start_time" ]; then
+            local current_time=$(date +%s)
+            local start_time_epoch=$(date -d "$start_time" +%s)
+            local uptime=$((current_time - start_time_epoch))
+            local days=$((uptime / 86400))
+            local hours=$(( (uptime % 86400) / 3600 ))
+            local minutes=$(( (uptime % 3600) / 60 ))
+            print_message "서버 가동 시간: ${days}일 ${hours}시간 ${minutes}분"
+            pre_update_version=$(execute_rcon_command info | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+            print_message "현재 서버 버전: $pre_update_version"
+        else
+            print_message "서버 시작 시간을 확인할 수 없습니다."
+        fi
+    else
+        print_message "서버가 중지되었습니다."
+    fi
+}
 check_and_update_script
 
-# 초기 설정 함수
+compression() {
+    local type="$1" 
+    local source_dir="${HOME}/Steam/steamapps/common/PalServer/Pal/Saved"
+
+    local backup_dir
+    local prefix
+    if [ "$type" = "backup" ]; then
+        prefix="backup"
+        backup_dir="${HOME}/maruta/backup"
+    elif [ "$type" = "saved" ]; then
+        prefix="saved"
+        backup_dir="${HOME}/maruta/saved"
+    else
+        print_message "잘못된 유형이 입력되었습니다."
+        return
+    fi
+    local backup_name="${prefix}_$(date +%m%d%H%M).tar.gz"
+    local backup_path="${backup_dir}/${backup_name}"
+    if [ ! -d "$backup_dir" ]; then
+        mkdir -p "$backup_dir"
+    fi
+    if [ ! -d "$source_dir" ]; then
+         print_message "백업할 폴더가 존재하지 않습니다: $source_dir"
+        return 1
+    fi
+    execute_rcon_command Save
+    execute_rcon_command "Broadcast [Save_system]_Save_Success! "
+    tar -czf "$backup_path" -C "$(dirname "$source_dir")" "$(basename "$source_dir")"
+
+    if [ $? -eq 0 ]; then
+        print_message "압축이 생성되었습니다: $backup_path"
+        chmod -R 700 "$backup_dir"
+    else
+         print_message "압축 생성 중 오류가 발생했습니다. 로그를 확인하세요."
+    fi
+}
+
+compression_list() {
+    local type="$1" 
+    local dir_path
+    if [ "$type" = "backup" ]; then
+        dir_path="${HOME}/maruta/backup"
+    elif [ "$type" = "saved" ]; then
+        dir_path="${HOME}/maruta/saved"
+    else
+        print_message "잘못된 유형이 입력되었습니다. 'backup' 또는 'saved' 중 하나를 입력해주세요."
+        return 1
+    fi
+    if [ ! -d "$dir_path" ]; then
+        print_message "지정된 디렉토리가 존재하지 않습니다: $dir_path"
+        return 1
+    fi
+    echo "${type}의 파일 목록:"
+    local file_count=0
+    for backup_file in "${dir_path}"/*.tar.gz; do
+        if [ -f "$backup_file" ]; then
+            if [ "$type" = "backup" ]; then
+                local current_time=$(date +%s)
+                local modification_time=$(stat -c %Y "$backup_file")
+                local time_diff=$((current_time - modification_time))
+                if [ "$time_diff" -le 7200 ]; then
+                    echo "$(basename "$backup_file")"
+                fi
+            else
+                echo "$(basename "$backup_file")"
+                ((file_count++))
+                [ "$file_count" -ge 20 ] && break
+            fi
+        fi
+    done
+}
+
+compression_delete() {
+    local type="$1"
+    local dir_path
+    local days
+    if [ "$type" = "backup" ]; then
+        dir_path="${HOME}/maruta/backup"
+        days=3  
+    elif [ "$type" = "saved" ]; then
+        dir_path="${HOME}/maruta/saved"
+        days=7  
+    else
+        print_message "잘못된 유형이 입력되었습니다. 'backup' 또는 'saved' 중 하나를 입력해주세요."
+        return 1
+    fi
+    if [ ! -d "$dir_path" ]; then
+        print_message "지정된 디렉토리가 존재하지 않습니다: $dir_path"
+        return 1
+    fi
+    find "$dir_path" -maxdepth 1 -name '*.tar.gz' -type f -mtime +$days -exec rm {} \;
+
+    print_message "${type} 폴더 에서 $days 일 이상된 압축 파일이 삭제되었습니다."
+}
+
+compression_cron_job() {
+    local script_path="${HOME}/palworld"
+    local new_cron_job="*/10 * * * * /bin/bash $script_path compression backup"
+    if ! crontab -l 2>/dev/null | grep -qF -- "$new_cron_job"; then
+        (crontab -l 2>/dev/null; echo "$new_cron_job") | crontab -
+        print_message "자동 백업 작업을 매 10분마다 실행하기 위한 스케줄을 등록합니다."
+    else
+        print_message "자동 백업 작업은 이미 크론탭에 등록되어 있습니다."
+    fi
+}
+
+compression_delete_cron_job() {
+    local script_path="${HOME}/palworld"
+    local new_cron_job_backup="0 0 * * * /bin/bash $script_path compression_delete backup"
+    local new_cron_job_saved="0 0 * * * /bin/bash $script_path compression_delete saved"
+    local current_crontab=$(crontab -l 2>/dev/null)
+    local update_crontab=false
+    if ! echo "$current_crontab" | grep -qF -- "$new_cron_job_backup"; then
+        current_crontab="$current_crontab"$'\n'"$new_cron_job_backup"
+        update_crontab=true
+    fi
+    if ! echo "$current_crontab" | grep -qF -- "$new_cron_job_saved"; then
+        current_crontab="$current_crontab"$'\n'"$new_cron_job_saved"
+        update_crontab=true
+    fi
+    if [ "$update_crontab" = true ]; then
+        echo "$current_crontab" | crontab -
+        print_message "기간 지난 백업&세이브 파일 삭제 작업을 매일 자정에 실행하기 위한 스케줄을 등록합니다."
+    else
+        print_message "기간 지난 백업&세이브 파일 삭제 작업은 이미 크론탭에 등록되어 있습니다."
+    fi
+}
+compression_load() {
+    print_message "복구를 위해 서버를 종료합니다."
+    execute_rcon_command Save
+    sudo systemctl stop $SERVICE_NAME
+    local type="$1"
+    local backup_dir
+    local prefix
+    if [ "$type" = "backup" ]; then
+        backup_dir="${HOME}/maruta/backup"
+        prefix="backup"
+    elif [ "$type" = "saved" ]; then
+        backup_dir="${HOME}/maruta/saved"
+        prefix="saved"
+    else
+        print_message "잘못된 유형이 입력되었습니다. 'backup' 또는 'saved' 중 하나를 입력해주세요."
+        return
+    fi
+    compression_list "$type"
+    local current_time=$(date "+%m%d%H%M")
+    print_message "복원할 ${type} 파일의 날짜와 시간을 입력하세요 (예: $current_time):"
+    read -r date_time
+    local file="${backup_dir}/${prefix}_${date_time}.tar.gz"
+    if [ -f "$file" ]; then
+
+        print_message "기존 Saved 폴더를 삭제합니다..."
+        rm -rf "${HOME}/Steam/steamapps/common/PalServer/Pal/Saved"
+        print_message "${type} 파일을 복원합니다: $file"
+        tar -xzf "$file" -C "${HOME}/Steam/steamapps/common/PalServer/Pal/"
+        print_message "복원이 완료되었습니다."
+        sudo systemctl start $SERVICE_NAME
+    else
+        print_message "${type} 파일이 존재하지 않습니다: $file"
+    fi
+}
+
+reboot_service() {
+    echo "게임 상태 저장 중..."
+    execute_rcon_command Save
+    echo "서비스 중지 중..."
+    sudo systemctl stop $SERVICE_NAME
+    echo "서비스 시작 중..."
+    sudo systemctl start $SERVICE_NAME
+    echo "서비스가 재시작되었습니다."
+}
+
+reboot_service_cron_job() {
+    local interval="$1"
+
+    if ! [[ "$interval" =~ ^[0-9]+$ ]]; then
+        print_message "잘못된 입력입니다. 숫자를 입력해 주세요."
+        return 1
+    fi
+
+    local script_path="${HOME}/palworld"
+    local command="/bin/bash $script_path reboot_service"
+    local new_cron_job="0 */${interval} * * * $command"
+
+    # 기존 크론탭 내용을 가져와서 해당 작업이 포함된 라인을 제거
+    local current_crontab=$(crontab -l 2>/dev/null | grep -vF -- "$command")
+
+    # 변경된 크론탭 내용에 새 작업을 추가하고 크론탭을 업데이트
+    echo "$current_crontab" | { cat; echo "$new_cron_job"; } | crontab -
+
+    print_message "${interval}시간마다 서비스 재시작 작업을 실행하기 위한 스케줄을 등록합니다."
+}
+
+
 initialize_script() {
     create_service_file
     print_initial_message
+    compression_cron_job
+    compression_delete_cron_job
+    sudo systemctl enable cron
+    sudo systemctl start cron
     touch "$INIT_FLAG_FILE"
 }
 
-# 초기 설정 확인 및 실행
 [ ! -f "$INIT_FLAG_FILE" ] && initialize_script
-
 
 control_service() {
     case $1 in
@@ -272,20 +508,77 @@ control_service() {
         update|UPDATE|up|UP|업데이트)
             update_service
             ;;
+
+        삭제)
+            cleanup_resources
+            ;;
+        state|STATE|sts|STS|상태)
+            check_service_state
+            ;;
+        compression)
+            shift
+            if [ $# -gt 0 ]; then
+                compression "$@"
+            else
+                print_message "압축 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
+            fi
+            ;;
+        compression_list)
+            shift
+            if [ $# -gt 0 ]; then
+                compression_list "$@"
+            else
+                print_message "리스트 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
+            fi
+            ;;
+        compression_delete)
+            shift
+            if [ $# -gt 0 ]; then
+                compression_delete "$@"
+            else
+                print_message "삭제 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
+            fi
+            ;;
+        load|LOAD|ld|LD|로드)  
+            shift
+            if [ $# -gt 0 ]; then
+                compression_load "$@"  
+            else
+                print_message "복원 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
+            fi
+            ;;
+        save|SAVE|sv|SV|저장)  
+            compression "saved"
+            ;;
+        restart|RESTART|rt|RT)
+            reboot_service
+            ;;
         execute_rcon_command)
             shift
             if [ $# -gt 0 ]; then
                 execute_rcon_command "$@"
             else
-                print_message "RCON 명령어가 지정되지 않았습니다."
+                print_message "명령어가 지정되지 않았습니다."
             fi
             ;;
-        삭제)
-            cleanup_resources
+        reboot|REBOOT|rb|RB)
+            shift 
+            if [ $# -gt 0 ]; then
+                reboot_service_cron_job "$@" 
+            else 
+                print_message "재시작 스케줄을 설정할 시간 간격이 지정되지 않았습니다. 숫자를 입력해주세요."
+            fi
             ;;
-        
+        compression_cron_job)
+            compression_cron_job
+            ;;
+        compression_delete_cron_job)
+            compression_delete_cron_job
+            ;;
     esac
 }
 
 control_service "$@"
+
+
 
