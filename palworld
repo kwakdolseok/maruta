@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.3"
+VERSION="0.2.4"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -484,6 +484,12 @@ reboot_service_cron_job() {
 
 
 initialize_script() {
+
+}
+
+
+if [ ! -f "$INIT_FLAG_FILE" ]; then
+    # 초기 설정 작업 수행
     create_service_file
     print_initial_message
     compression_cron_job
@@ -491,9 +497,7 @@ initialize_script() {
     sudo systemctl enable cron
     sudo systemctl start cron
     touch "$INIT_FLAG_FILE"
-}
-
-[ ! -f "$INIT_FLAG_FILE" ] && initialize_script
+else
 
 control_service() {
     case $1 in
