@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.1"
+VERSION="0.2.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -245,6 +245,7 @@ check_and_update_script() {
     if [ "$1" = "noupdate" ]; then
         return
     fi
+
     local remote_version=$(wget -qO- https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
     if [ "$VERSION" != "$remote_version" ]; then
         print_message "새 버전 $remote_version 발견. 업데이트를 진행하시겠습니까? (yes/y 또는 no/n)"
@@ -254,8 +255,8 @@ check_and_update_script() {
                 print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
-                 ~/palworld noupdate
-                print_message "마루타 구동기 업데이트 완료 했습니다."
+                ~/palworld noupdate
+                exit
                 ;;
             no|n|NO|N)
                 print_message "업데이트를 취소했습니다."
@@ -266,6 +267,7 @@ check_and_update_script() {
         esac
     fi
 }
+
 
 check_service_state() {
     if systemctl is-active --quiet $SERVICE_NAME; then
@@ -483,16 +485,22 @@ reboot_service_cron_job() {
 }
 
 
-if [ ! -f "$INIT_FLAG_FILE" ]; then
-    # 초기 설정 작업 수행
-    create_service_file
-    print_initial_message
-    compression_cron_job
-    compression_delete_cron_job
-    sudo systemctl enable cron
-    sudo systemctl start cron
-    touch "$INIT_FLAG_FILE"
-fi
+# 초기화 및 설정 함수
+initialize_script() {
+    if [ ! -f "$INIT_FLAG_FILE" ]; then
+        create_service_file
+        print_initial_message
+        compression_cron_job
+        compression_delete_cron_job
+        sudo systemctl enable cron
+        sudo systemctl start cron
+        touch "$INIT_FLAG_FILE"
+    fi
+}
+
+# 메인 로직
+check_and_update_script "$@"
+initialize_script
 
 control_service() {
     case $1 in
