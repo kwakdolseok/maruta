@@ -3,7 +3,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.12"
+VERSION="0.2.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 # 상수 정의
