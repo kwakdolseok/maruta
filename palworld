@@ -492,7 +492,7 @@ if [ ! -f "$INIT_FLAG_FILE" ]; then
     sudo systemctl enable cron
     sudo systemctl start cron
     touch "$INIT_FLAG_FILE"
-else
+fi
 
 control_service() {
     case $1 in
