@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.2"
+VERSION="0.2.1"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -438,7 +438,8 @@ compression_load() {
     fi
     compression_list "$type"
     local current_time=$(date "+%m%d%H%M")
-    print_message "복원할 ${type} 파일의 날짜와 시간을 입력하세요 (예: $current_time):"
+    print_message "복원할 ${type} 파일의 날짜와 시간을 입력하세요 ('예: $current_time'):"
+
     read -r date_time
     local file="${backup_dir}/${prefix}_${date_time}.tar.gz"
     if [ -f "$file" ]; then
