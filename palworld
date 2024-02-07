@@ -3,7 +3,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.11"
+VERSION="0.2.12"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 # 상수 정의
@@ -245,8 +245,8 @@ check_and_update_script() {
                 print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
-                ~/palworld noupdate
-                exit
+                #~/palworld noupdate
+                exit 0
                 ;;
             no|n|NO|N)
                 print_message "업데이트를 취소했습니다."
