@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.1"
+VERSION="0.2.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -254,7 +254,7 @@ check_and_update_script() {
                 print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
-                exec ~/palworld noupdate
+                 ~/palworld noupdate
                 print_message "마루타 구동기 업데이트 완료 했습니다."
                 ;;
             no|n|NO|N)
