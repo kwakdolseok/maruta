@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.4"
+VERSION="0.2.1"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -480,11 +480,6 @@ reboot_service_cron_job() {
     echo "$current_crontab" | { cat; echo "$new_cron_job"; } | crontab -
 
     print_message "${interval}시간마다 서비스 재시작 작업을 실행하기 위한 스케줄을 등록합니다."
-}
-
-
-initialize_script() {
-
 }
 
 
