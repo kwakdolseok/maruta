@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.2"
+VERSION="0.2.3"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
