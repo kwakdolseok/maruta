@@ -230,7 +230,6 @@ cleanup_resources() {
 
     print_message "모든 리소스가 삭제되었습니다."
 }
-
 check_and_update_script() {
     if [ "$1" = "noupdate" ]; then
         return
@@ -245,7 +244,8 @@ check_and_update_script() {
                 print_message "마루타 구동기를 업데이트하고 있습니다..."
                 wget -q -O ~/palworld https://raw.githubusercontent.com/kwakdolseok/maruta/main/palworld
                 chmod +x ~/palworld
-                #~/palworld noupdate
+                print_message "업데이트가 완료되었습니다. 변경 사항을 적용하기 위해 다음 명령을 실행하세요:"
+                echo "source ~/palworld"
                 exit 0
                 ;;
             no|n|NO|N)
@@ -257,7 +257,6 @@ check_and_update_script() {
         esac
     fi
 }
-
 check_service_state() {
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         print_message "서버가 실행 중입니다."
@@ -541,6 +540,7 @@ control_service() {
 }
 
 if [ ! -f "$INIT_FLAG_FILE" ]; then
+    echo "Creating service file and initializing..."
     create_service_file
     print_initial_message
     compression_cron_job
@@ -548,7 +548,11 @@ if [ ! -f "$INIT_FLAG_FILE" ]; then
     sudo systemctl enable cron
     sudo systemctl start cron
     touch "$INIT_FLAG_FILE"
+    echo "$INIT_FLAG_FILE created."
+else
+    echo "$INIT_FLAG_FILE already exists."
 fi
+
 
 check_and_update_script "$@"
 control_service "$@"
