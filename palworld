@@ -4,7 +4,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.0"
+VERSION="0.2.1"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 
@@ -170,18 +170,17 @@ stop_service() {
         execute_rcon_command "Broadcast Pelworld_server_system_shutdown"
         execute_rcon_command Save
         execute_rcon_command "Broadcast [Save]_Success!"
-        print_message "서버를 중지합니다..."
-        print_message "[Save]_Success!"
+        print_message "Palworld Server 서버를 중지합니다..."
         sleep 2
         sudo systemctl stop $SERVICE_NAME        
         sleep 2  # 잠시 대기
         if systemctl is-active --quiet $SERVICE_NAME; then
-            print_message "서버가 정상적으로 종료되지 않았습니다."
+            print_message "Palworld Server 정상적으로 종료되지 않았습니다."
         else
-            print_message "서버가 정상적으로 종료되었습니다."
+            print_message "Palworld Server 정상적으로 종료되었습니다."
         fi
     else
-        print_message "서버는 이미 중지된 상태입니다."
+        print_message "Palworld Server 이미 중지된 상태입니다."
     fi
 }
 
@@ -454,13 +453,12 @@ compression_load() {
 }
 
 reboot_service() {
-    echo "게임 상태 저장 중..."
+    print_message  "게임 상태 저장 중..."
     execute_rcon_command Save
-    echo "서비스 중지 중..."
-    sudo systemctl stop $SERVICE_NAME
-    echo "서비스 시작 중..."
-    sudo systemctl start $SERVICE_NAME
-    echo "서비스가 재시작되었습니다."
+    sleep 5  
+    print_message "Palworld Server 재시작 합니다....."
+    sudo systemctl restart $SERVICE_NAME
+
 }
 
 reboot_service_cron_job() {
@@ -514,6 +512,9 @@ control_service() {
             ;;
         state|STATE|sts|STS|상태)
             check_service_state
+            ;;
+        reboot_service)
+            reboot_service
             ;;
         compression)
             shift
