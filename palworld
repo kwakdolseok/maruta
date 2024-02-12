@@ -3,7 +3,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.1"
+VERSION="0.2.2"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 # 상수 정의
@@ -62,6 +62,16 @@ print_usage() {
 create_service_file() {
     [ -f "$SERVICE_FILE" ] && return
 
+    echo "스레드 옵션을 사용하시겠습니까? no 선택시 아무런 옵션 없이 실행 됩니다 (yes/no)"
+    read use_thread_option
+
+    local exec_start_line
+    if [ "$use_thread_option" = "yes" ]; then
+        exec_start_line="ExecStart=${HOME%/}/Steam/steamapps/common/PalServer/PalServer.sh -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS -EpicApp=PalServer"
+    else
+        exec_start_line="ExecStart=${HOME%/}/Steam/steamapps/common/PalServer/PalServer.sh"
+    fi
+
     sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]
 Description=Palworld Service
@@ -73,7 +83,7 @@ Type=simple
 User=$USERNAME
 Group=$USERNAME
 WorkingDirectory=${HOME%/}/Steam/steamapps/common/PalServer
-ExecStart=${HOME%/}/Steam/steamapps/common/PalServer/PalServer.sh -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+$exec_start_line
 Restart=always
 RestartSec=5
 
@@ -85,6 +95,8 @@ EOF
     sudo systemctl enable "$SERVICE_NAME"
     print_message "$SERVICE_NAME 리눅스 시스템에 구동기 등록이 완료되었습니다."
 }
+
+
 
 getAdminPassword() {
     local output_file="$HOME/.palworldsettings.ini"
@@ -124,9 +136,9 @@ execute_rcon_command() {
         echo "$output" | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1
     else
         if [ -n "$rcon_args" ]; then
-            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args" >/dev/null 2>&1
+            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" "$rcon_args" 
         else
-            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" >/dev/null 2>&1
+            ./ARRCON -P "$rcon_port" -p "$admin_password" "$rcon_command" 
         fi
     fi
 }
@@ -197,39 +209,6 @@ update_service() {
     fi
 }
 
-cleanup_resources() {
-    print_message "리소스 삭제를 시작합니다..."
-
-    if [ -f "$SERVICE_FILE" ]; then
-        print_message "$SERVICE_NAME 서비스 파일을 삭제합니다."
-        sudo systemctl stop "$SERVICE_NAME"
-        sudo systemctl disable "$SERVICE_NAME"
-        sudo rm -f "$SERVICE_FILE"
-        sudo systemctl daemon-reload
-        print_message "$SERVICE_NAME 서비스 파일이 삭제되었습니다."
-    else
-        print_message "$SERVICE_NAME 서비스 파일이 이미 삭제되었거나 존재하지 않습니다."
-    fi
-
-    if [ -f "$INIT_FLAG_FILE" ]; then
-        print_message "초기화 플래그 파일을 삭제합니다."
-        rm -f "$INIT_FLAG_FILE"
-        print_message "초기화 플래그 파일이 삭제되었습니다."
-    else
-        print_message "초기화 플래그 파일이 이미 삭제되었거나 존재하지 않습니다."
-    fi
-
-    local palworld_path="${HOME}/palworld"
-    if [ -e "$palworld_path" ]; then
-        print_message "홈 디렉토리에서 'palworld'을(를) 삭제합니다."
-        rm -rf "$palworld_path"
-        print_message "'palworld'이(가) 삭제되었습니다."
-    else
-        print_message "홈 디렉토리에 'palworld'이(가) 존재하지 않습니다."
-    fi
-
-    print_message "모든 리소스가 삭제되었습니다."
-}
 check_and_update_script() {
     if [ "$1" = "noupdate" ]; then
         return
@@ -295,7 +274,14 @@ compression() {
         print_message "잘못된 유형이 입력되었습니다."
         return
     fi
-    local backup_name="${prefix}_$(date +%Y%m%d%H%M%S).tar.gz"
+
+    # 서비스 상태 확인
+    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        print_message "게임엔진 이 정지 중입니다.. 백업을 진행하지 않습니다."
+        return
+    fi
+
+    local backup_name="${prefix}_$(date +%m%d%H%M).tar.gz"
     local backup_path="${backup_dir}/${backup_name}"
     if [ ! -d "$backup_dir" ]; then
         mkdir -p "$backup_dir"
@@ -315,6 +301,7 @@ compression() {
         print_message "압축 생성 중 오류가 발생했습니다. 로그를 확인하세요."
     fi
 }
+
 
 compression_list() {
     local type="$1"
@@ -416,7 +403,7 @@ compression_load() {
         return
     fi
     compression_list "$type"
-    local current_time=$(date "+%Y%m%d%H%M%S")
+    local current_time=$(date "+%m%d%H%M")
     print_message "복원할 ${type} 파일의 날짜와 시간을 입력하세요 ('예: $current_time'):"
 
     read -r date_time
@@ -459,96 +446,85 @@ reboot_service_cron_job() {
     print_message "${interval}시간마다 서비스 재시작 작업을 실행하기 위한 스케줄을 등록합니다."
 }
 
+
+palworld_settings() {
+    local ini_file="$HOME/Steam/steamapps/common/PalServer/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
+    local output_file="$HOME/.palworldsettings.ini"
+
+    # 파일 존재 여부 확인
+    if [ ! -f "$ini_file" ]; then
+        echo "Error: $ini_file 파일을 찾을 수 없습니다."
+        return 1
+    fi
+
+    # RCONEnabled 값 확인
+    local rcon_enabled=$(awk '/RCONEnabled=/ {match($0, /RCONEnabled=(True|False)/, arr); print arr[1]}' "$ini_file")
+
+    # AdminPassword 값 추출
+    local admin_password=$(awk '/AdminPassword=/ {match($0, /AdminPassword="([^"]*)"/, arr); print arr[1]}' "$ini_file")
+
+    # RCONPort 값 추출
+    local rcon_port=$(awk '/RCONPort=/ {match($0, /RCONPort=([0-9]+)/, arr); print arr[1]}' "$ini_file")
+
+    # 기존 .palworldsettings.ini 파일과 비교
+    if [ -f "$output_file" ]; then
+        local old_admin_password=$(awk -F ': ' '/AdminPassword/ {print $2}' "$output_file")
+        local old_rcon_port=$(awk -F ': ' '/RCONPort/ {print $2}' "$output_file")
+        local old_rcon_enabled=$(awk -F ': ' '/RCONEnabled/ {print $2}' "$output_file")
+
+        # 변경 사항 확인
+        if [[ "$admin_password" != "$old_admin_password" || "$rcon_port" != "$old_rcon_port" || "$rcon_enabled" != "$old_rcon_enabled" ]]; then
+            echo "변경 사항 감지됨. 설정 업데이트 중..."
+            echo "AdminPassword: $admin_password" > "$output_file"
+            echo "RCONPort: $rcon_port" >> "$output_file"
+            echo "RCONEnabled: $rcon_enabled" >> "$output_file"
+        else
+            echo "변경 사항 없음. 설정 업데이트 없음."
+        fi
+    else
+        # .palworldsettings.ini 파일이 존재하지 않는 경우, 새로 생성
+        echo "AdminPassword: $admin_password" > "$output_file"
+        echo "RCONPort: $rcon_port" >> "$output_file"
+        echo "RCONEnabled: $rcon_enabled" >> "$output_file"
+    fi
+}
+
+
+
 control_service() {
     case $1 in
-        start|START|st|ST|시작)
-            start_service
-            ;;
-        stop|STOP|sp|SP|정지)
-            stop_service
-            ;;
-        update|UPDATE|up|UP|업데이트)
-            update_service
-            ;;
-        state|STATE|sts|STS|상태)
-            check_service_state
-            ;;
-        reboot_service)
-            reboot_service
-            ;;
-        compression)
-            shift
-            if [ $# -gt 0 ]; then
-                compression "$@"
-            else
-                print_message "압축 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
-            fi
-            ;;
-        compression_list)
-            shift
-            if [ $# -gt 0 ]; then
-                compression_list "$@"
-            else
-                print_message "리스트 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
-            fi
-            ;;
-        compression_delete)
-            shift
-            if [ $# -gt 0 ]; then
-                compression_delete "$@"
-            else
-                print_message "삭제 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
-            fi
-            ;;
-        load|LOAD|ld|LD|로드)
-            shift
-            if [ $# -gt 0 ]; then
-                compression_load "$@"
-            else
-                print_message "복원 유형이 지정되지 않았습니다. 'backup' 또는 'saved'를 입력해주세요."
-            fi
-            ;;
-        save|SAVE|sv|SV|저장)
-            compression "saved"
-            ;;
-        restart|RESTART|rt|RT)
-            reboot_service
-            ;;
-        execute_rcon_command)
-            shift
-            if [ $# -gt 0 ]; then
-                execute_rcon_command "$@"
-            else
-                print_message "명령어가 지정되지 않았습니다."
-            fi
-            ;;
-        reboot|REBOOT|rb|RB)
-            shift
-            if [ $# -gt 0 ]; then
-                reboot_service_cron_job "$@"
-            else
-                print_message "재시작 스케줄을 설정할 시간 간격이 지정되지 않았습니다. 숫자를 입력해주세요."
-            fi
-            ;;
-        compression_cron_job)
-            compression_cron_job
-            ;;
-        compression_delete_cron_job)
-            compression_delete_cron_job
-            ;;
+        start|START|st|ST|시작) start_service ;;
+        stop|STOP|sp|SP|정지) stop_service ;;
+        update|UPDATE|up|UP|업데이트) update_service ;;
+        state|STATE|sts|STS|상태) check_service_state ;;
+        reboot_service) reboot_service ;;
+        compression) shift; compression "$@" ;;
+        compression_list) shift; compression_list "$@" ;;
+        compression_delete) shift; compression_delete "$@" ;;
+        load|LOAD|ld|LD|로드) shift; compression_load "$@" ;;
+        save|SAVE|sv|SV|저장) compression "saved" ;;
+        restart|RESTART|rt|RT) reboot_service ;;
+        execute_rcon_command) shift; execute_rcon_command "$@" ;;
+        reboot|REBOOT|rb|RB)  shift; reboot_service_cron_job "$@" ;;
+        compression_cron_job) compression_cron_job ;;
+        compression_delete_cron_job) compression_delete_cron_job ;; 
+        palworld_settings) palworld_settings ;;           
     esac
 }
 
+
 if [ ! -f "$INIT_FLAG_FILE" ]; then
-    # 초기 설정이 필요한 경우만 실행
     create_service_file
     print_initial_message
+
+    # 크론 작업 등록 및 cron 서비스 활성화
     compression_cron_job
     compression_delete_cron_job
     sudo systemctl enable cron
     sudo systemctl start cron
-    touch "$INIT_FLAG_FILE"
-fi
 
-check_and_update_script "$@"
-control_service "$@"
+    touch "$INIT_FLAG_FILE"
+else
+    check_and_update_script "$@"
+    control_service "$@"
+fi
