@@ -3,7 +3,7 @@
 USERNAME=$(whoami)
 SERVICE_NAME="Palworld"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-VERSION="0.2.2"
+VERSION="0.2.3"
 INIT_FLAG_FILE="${HOME%/}/.script_init_done"
 
 # 상수 정의
@@ -525,6 +525,7 @@ if [ ! -f "$INIT_FLAG_FILE" ]; then
 
     touch "$INIT_FLAG_FILE"
 else
+    palworld_settings
     check_and_update_script "$@"
     control_service "$@"
 fi
